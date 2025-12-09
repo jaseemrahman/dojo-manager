@@ -26,18 +26,10 @@ services:
       - key: ALLOWED_HOSTS
         value: "*"
 
-  - type: web
+  - type: static
     name: dojo-frontend
-    runtime: static
-    region: singapore
     plan: free
     branch: main
     rootDir: frontend
     buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_URL
-        fromService:
-          type: web
-          name: dojo-backend
-          property: url
+    publishPath: dist

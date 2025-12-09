@@ -23,9 +23,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-0vb5(y_*nlz0n$@pyi3c(mij+fr!rn3$gi62t&_bk(#tgk1#ua'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = []
+
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "dojo-manager.onrender.com",  
+]
+
 
 
 # Application definition

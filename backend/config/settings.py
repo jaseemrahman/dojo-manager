@@ -25,13 +25,7 @@ SECRET_KEY = 'django-insecure-0vb5(y_*nlz0n$@pyi3c(mij+fr!rn3$gi62t&_bk(#tgk1#ua
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# ALLOWED_HOSTS = []
-
-
 ALLOWED_HOSTS = ['*']
-
-
-
 
 # Application definition
 
@@ -70,17 +64,6 @@ REST_FRAMEWORK = {
     # 'PAGE_SIZE': 100,
 }
 
-import os
-# MEDIA_URL = '/media/'
-# MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# MEDIA_URL = '/media/'
-# MEDIA_URL = "https://dojo-media.onrender.com/"
-# MEDIA_ROOT = BASE_DIR / 'media'
-
-# STATICFILES_DIRS = [
-#     BASE_DIR / "media",
-# ]
 
 
 MIDDLEWARE = [
@@ -168,8 +151,6 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-
-
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
@@ -177,6 +158,12 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Optional (recommended)
+CORS_ALLOW_CREDENTIALS = True
+
 
 # Jazzmin Settings
 JAZZMIN_SETTINGS = {

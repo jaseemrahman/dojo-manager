@@ -86,6 +86,7 @@ class Student(models.Model):
     state = models.CharField(max_length=100, blank=True, null=True)
     district = models.CharField(max_length=100, blank=True, null=True)
     national_id = models.CharField(max_length=50, blank=True, null=True)
+    registration_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
     admission_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     admission_date = models.DateField(default=timezone.now)
     current_belt = models.CharField(max_length=20, choices=BeltLevel.choices, default=BeltLevel.WHITE)
@@ -96,6 +97,28 @@ class Student(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        # Auto-generate registration number from DOB: MTA + DDMMYYYY + sequence
+        if self.date_of_birth:
+            day = self.date_of_birth.strftime('%d')
+            month = self.date_of_birth.strftime('%m')
+            year = self.date_of_birth.strftime('%Y')
+            base_reg_no = f"MTA{day}{month}{year}"
+            
+            # Check if registration number already exists or needs to be generated
+            if not self.registration_number or not self.registration_number.startswith(base_reg_no):
+                # Find existing students with same DOB to determine sequence number
+                existing_count = Student.objects.filter(
+                    registration_number__startswith=base_reg_no
+                ).exclude(id=self.id).count()
+                
+                if existing_count == 0:
+                    self.registration_number = base_reg_no
+                else:
+                    # Add sequence number for students with same DOB
+                    self.registration_number = f"{base_reg_no}-{existing_count + 1}"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -111,6 +134,10 @@ class MonthlyFee(models.Model):
         ('unpaid', 'Unpaid'),
         ('partial', 'Partial')
     ], default='unpaid')
+    payment_method = models.CharField(max_length=10, choices=[
+        ('upi', 'UPI'),
+        ('cash', 'Cash')
+    ], blank=True, null=True)
     paid_date = models.DateField(null=True, blank=True)
     payment_history = models.JSONField(default=list, blank=True)  # Store payment history [{date: "2025-12-06", amount: 100}, ...]
     notes = models.TextField(blank=True, null=True)
@@ -159,7 +186,7 @@ class StudentEvent(models.Model):
     date = models.DateField()
     location = models.CharField(max_length=255, blank=True, null=True)
     participation_type = models.CharField(max_length=20, choices=[('participated', 'Participated'), ('winner', 'Winner')])
-    result = models.CharField(max_length=100, blank=True, null=True) # e.g. Gold, 1st Place
+    event_items = models.JSONField(default=list, blank=True)  # [{"item_name": "Kata", "prize": "Gold Medal"}]
     event_photo = models.ImageField(upload_to='event_photos/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

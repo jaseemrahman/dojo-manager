@@ -148,8 +148,10 @@ export const generateInvoice = async (fees: any[], student: any, year: number) =
         doc.text(addressText.substring(0, 50), 55, yPos);
         yPos += 12;
 
-        // 5. Fee Table
-        const tableBody = fees.map(fee => {
+        // 5. Fee Table with inline payment history
+        const tableBody: any[] = [];
+
+        fees.forEach(fee => {
             const feeDate = new Date(year, fee.month - 1);
             const feeMonthStr = format(feeDate, "MMMM yyyy");
             let paid = 0;
@@ -159,40 +161,64 @@ export const generateInvoice = async (fees: any[], student: any, year: number) =
             const balance = amount - paid;
             const statusDisplay = fee.status ? fee.status.charAt(0).toUpperCase() + fee.status.slice(1) : 'Unpaid';
             const feeType = student.fee_structure === '4_classes_1000' ? '4 classes/week' : '2 classes/week';
+            const paymentMethod = fee.payment_method ? (fee.payment_method === 'upi' ? 'UPI' : 'Cash') : '-';
 
-            return [
+            // Main fee row
+            tableBody.push([
                 feeMonthStr,
                 feeType,
                 `Rs.${amount.toFixed(2)}`,
-                `Rs.${paid.toFixed(2)}`,
                 `Rs.${balance.toFixed(2)}`,
-                statusDisplay
-            ];
+                statusDisplay,
+                paymentMethod
+            ]);
+
+            // Add payment history rows - each payment as a complete row with all columns
+            if (fee.payment_history && fee.payment_history.length > 0) {
+                let runningBalance = amount;
+
+                fee.payment_history.forEach((payment: any, idx: number) => {
+                    const paidAmt = parseFloat(payment.amount || 0);
+                    runningBalance -= paidAmt;
+                    const payMethod = payment.payment_method ? (payment.payment_method === 'upi' ? 'UPI' : 'Cash') : '-';
+                    const payDate = payment.date ? format(new Date(payment.date), "dd/MM/yyyy") : '-';
+
+                    // Complete row for each payment
+                    tableBody.push([
+                        payDate,
+                        feeType,
+                        `Rs.${paidAmt.toFixed(2)}`,
+                        `Rs.${runningBalance.toFixed(2)}`,
+                        'Partial',
+                        payMethod
+                    ]);
+                });
+            }
         });
 
         autoTable(doc, {
             startY: yPos,
-            head: [["Month", "Fee Type", "Amount", "Paid", "Balance", "Status"]],
+            head: [["Month", "Fee Type", "Amount", "Balance", "Status", "Method"]],
             body: tableBody,
             headStyles: {
                 fillColor: [139, 0, 0],
                 textColor: [255, 255, 255],
                 fontStyle: 'bold',
-                fontSize: 10,
-                halign: 'center',
-                cellPadding: 4
-            },
-            bodyStyles: {
                 fontSize: 9,
+                halign: 'center',
                 cellPadding: 3
             },
+            bodyStyles: {
+                fontSize: 8,
+                cellPadding: 2.5
+            },
             columnStyles: {
-                0: { halign: 'left' },
-                1: { halign: 'left' },
-                2: { halign: 'right' },
-                3: { halign: 'right' },
-                4: { halign: 'right' },
-                5: { halign: 'center' }
+                0: { halign: 'left', cellWidth: 40 },
+                1: { halign: 'left', cellWidth: 35 },
+                2: { halign: 'right', cellWidth: 30 },
+                3: { halign: 'right', cellWidth: 30 },
+                4: { halign: 'center', cellWidth: 25 },
+                5: { halign: 'center', cellWidth: 20 }
             },
             styles: {
                 lineColor: [255, 255, 255],
@@ -202,11 +228,11 @@ export const generateInvoice = async (fees: any[], student: any, year: number) =
                 fillColor: [250, 250, 250]
             },
             didParseCell: (data) => {
-                if (data.section === 'body' && data.column.index === 5) {
+                if (data.section === 'body' && data.column.index === 4 && typeof data.cell.raw === 'string') {
                     const status = data.cell.raw;
                     if (status === 'Paid') data.cell.styles.textColor = [0, 128, 0];
                     else if (status === 'Partial') data.cell.styles.textColor = [255, 165, 0];
-                    else data.cell.styles.textColor = [255, 0, 0];
+                    else if (status === 'Unpaid') data.cell.styles.textColor = [255, 0, 0];
                 }
             },
             theme: 'plain',

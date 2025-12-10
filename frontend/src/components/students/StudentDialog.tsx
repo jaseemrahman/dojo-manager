@@ -132,9 +132,19 @@ const StudentDialog = ({ open, student, onClose }: StudentDialogProps) => {
     setPhotoFile(null);
   }, [student, open]);
 
-  // Handle state change - reset district if logic requires (optional, but good UX)
+  // Handle state change - reset district only if it's not valid for the new state
   const handleStateChange = (value: string) => {
-    setFormData(prev => ({ ...prev, state: value, district: "" }));
+    const currentDistrict = formData.district;
+    const newStateDistricts = districtsByState[value] || [];
+
+    // Only reset district if it's not in the new state's district list
+    const shouldResetDistrict = currentDistrict && !newStateDistricts.includes(currentDistrict);
+
+    setFormData(prev => ({
+      ...prev,
+      state: value,
+      district: shouldResetDistrict ? "" : currentDistrict
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -475,6 +485,7 @@ const StudentDialog = ({ open, student, onClose }: StudentDialogProps) => {
             <div className="space-y-2">
               <Label htmlFor="district">District *</Label>
               <Select
+                key={`district-${formData.state}-${formData.district}`}
                 value={formData.district}
                 onValueChange={(value) => setFormData({ ...formData, district: value })}
                 disabled={!formData.state}

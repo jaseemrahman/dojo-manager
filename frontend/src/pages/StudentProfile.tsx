@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ArrowLeft, User, Phone, MapPin, Calendar, Award, GraduationCap, Save, Download, Trash2, Edit, Plus, Trophy } from "lucide-react";
 import api from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -500,38 +501,114 @@ const StudentProfile = () => {
 
       yPosition = (doc as any).lastAutoTable.finalY + 10;
 
-      // Fee History
-      let filteredFeeData = [...feeData];
+      // Fee History - Enhanced with complete details
       if (student.admission_date) {
         const admDate = new Date(student.admission_date);
-        filteredFeeData = filteredFeeData.filter((f: any) => {
-          if (f.year < admDate.getFullYear()) return false;
-          if (f.year === admDate.getFullYear() && f.month < (admDate.getMonth() + 1)) return false;
-          return true;
-        });
-      }
+        const currentDate = new Date();
+        const feeStructureAmount = student.fee_structure === '4_classes_1000' ? 1000 : 700;
 
-      if (filteredFeeData.length > 0) {
-        doc.setFontSize(12);
-        doc.setFont("helvetica", "bold");
-        doc.text("Fee History", 14, yPosition);
-        yPosition += 5;
-
-        autoTable(doc, {
-          startY: yPosition,
-          head: [['Month/Year', 'Amount', 'Status', 'Payment Date']],
-          body: filteredFeeData.map(fee => [
-            `${getMonthName(fee.month)} ${fee.year}`,
-            `Rs.${Number(fee.amount).toFixed(2)}`,
-            fee.status.charAt(0).toUpperCase() + fee.status.slice(1),
-            fee.paid_date ? new Date(fee.paid_date).toLocaleDateString('en-GB') : '-'
-          ]),
-          theme: 'striped',
-          headStyles: { fillColor: [220, 38, 38], textColor: 255 },
-          styles: { fontSize: 9 },
+        // Create a map of existing fees
+        const feeMap = new Map();
+        feeData.forEach((fee: any) => {
+          const key = `${fee.year}-${fee.month}`;
+          feeMap.set(key, fee);
         });
 
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
+        // Generate all months from admission date to current date
+        const allMonthsFees = [];
+        let currentMonth = admDate.getMonth() + 1;
+        let currentYear = admDate.getFullYear();
+        const endMonth = currentDate.getMonth() + 1;
+        const endYear = currentDate.getFullYear();
+
+        while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMonth)) {
+          const key = `${currentYear}-${currentMonth}`;
+          const existingFee = feeMap.get(key);
+
+          if (existingFee) {
+            // Fee record exists
+            const remaining = existingFee.status === 'partial'
+              ? (feeStructureAmount - (existingFee.partial_amount_paid || 0)).toFixed(2)
+              : '0.00';
+
+            allMonthsFees.push({
+              month: currentMonth,
+              year: currentYear,
+              amount: feeStructureAmount,
+              status: existingFee.status,
+              payment_method: existingFee.payment_method || '-',
+              paid_amount: existingFee.status === 'partial'
+                ? (existingFee.partial_amount_paid || 0).toFixed(2)
+                : existingFee.status === 'paid' ? feeStructureAmount.toFixed(2) : '0.00',
+              remaining: remaining,
+              paid_date: existingFee.paid_date || '-'
+            });
+          } else {
+            // No fee record - mark as unpaid
+            allMonthsFees.push({
+              month: currentMonth,
+              year: currentYear,
+              amount: feeStructureAmount,
+              status: 'unpaid',
+              payment_method: '-',
+              paid_amount: '0.00',
+              remaining: feeStructureAmount.toFixed(2),
+              paid_date: '-'
+            });
+          }
+
+          // Move to next month
+          currentMonth++;
+          if (currentMonth > 12) {
+            currentMonth = 1;
+            currentYear++;
+          }
+        }
+
+        if (allMonthsFees.length > 0) {
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Complete Fee History", 14, yPosition);
+          yPosition += 5;
+
+          autoTable(doc, {
+            startY: yPosition,
+            head: [['Month/Year', 'Fee', 'Status', 'Paid', 'Remaining', 'Method', 'Date']],
+            body: allMonthsFees.map(fee => [
+              `${getMonthName(fee.month)} ${fee.year}`,
+              `Rs.${fee.amount}`,
+              fee.status.charAt(0).toUpperCase() + fee.status.slice(1),
+              `Rs.${fee.paid_amount}`,
+              `Rs.${fee.remaining}`,
+              fee.payment_method === 'upi' ? 'UPI' : fee.payment_method === 'cash' ? 'Cash' : '-',
+              fee.paid_date !== '-' ? new Date(fee.paid_date).toLocaleDateString('en-GB') : '-'
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [220, 38, 38], textColor: 255, fontSize: 8 },
+            styles: { fontSize: 8 },
+            columnStyles: {
+              0: { cellWidth: 30 },
+              1: { cellWidth: 22 },
+              2: { cellWidth: 22 },
+              3: { cellWidth: 22 },
+              4: { cellWidth: 25 },
+              5: { cellWidth: 20 },
+              6: { cellWidth: 25 }
+            }
+          });
+
+          yPosition = (doc as any).lastAutoTable.finalY + 10;
+
+          // Add fee summary
+          const totalPaid = allMonthsFees.reduce((sum, fee) => sum + parseFloat(fee.paid_amount), 0);
+          const totalRemaining = allMonthsFees.reduce((sum, fee) => sum + parseFloat(fee.remaining), 0);
+
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.text(`Total Paid: Rs.${totalPaid.toFixed(2)}`, 14, yPosition);
+          doc.text(`Total Remaining: Rs.${totalRemaining.toFixed(2)}`, 100, yPosition);
+          yPosition += 10;
+        }
       }
 
       // Check if we need a new page
@@ -728,112 +805,117 @@ const StudentProfile = () => {
                 {formatBeltName(student.current_belt)}
               </Badge>
             </div>
-            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Student Name</p>
-                <p className="font-semibold text-base sm:text-lg break-words">{student.name}</p>
-              </div>
-              {student.registration_number && (
+            <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-6">
+              {/* Left Column - 8 fields */}
+              <div className="flex-1 space-y-3">
                 <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Registration Number</p>
-                  <p className="font-semibold text-base sm:text-lg text-primary break-words">{student.registration_number}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Student Name</p>
+                  <p className="font-semibold text-base sm:text-lg break-words">{student.name}</p>
                 </div>
-              )}
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Gender</p>
-                <p className="font-semibold text-sm sm:text-base capitalize">{student.gender}</p>
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Date of Birth</p>
-                <p className="font-semibold text-sm sm:text-base">
-                  {new Date(student.date_of_birth).toLocaleDateString('en-GB')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Age</p>
-                <p className="font-semibold text-sm sm:text-base">{student.age} years</p>
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                  <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
-                  Phone Number
-                </p>
-                <p className="font-semibold text-sm sm:text-base">{student.phone_number}</p>
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Guardian Name</p>
-                <p className="font-semibold text-sm sm:text-base break-words">{student.guardian_name}</p>
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Gender</p>
+                  <p className="font-semibold text-sm sm:text-base capitalize">{student.gender}</p>
+                </div>
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Date of Birth</p>
+                  <p className="font-semibold text-sm sm:text-base">
+                    {new Date(student.date_of_birth).toLocaleDateString('en-GB')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Age</p>
+                  <p className="font-semibold text-sm sm:text-base">{student.age} years</p>
+                </div>
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                    <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
+                    Phone Number
+                  </p>
+                  <p className="font-semibold text-sm sm:text-base">{student.phone_number}</p>
+                </div>
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Guardian Name</p>
+                  <p className="font-semibold text-sm sm:text-base break-words">{student.guardian_name}</p>
+                </div>
+                <div>
+                  <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                    <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+                    Admission Date
+                  </p>
+                  <p className="font-semibold text-sm sm:text-base">
+                    {new Date(student.admission_date).toLocaleDateString('en-GB')}
+                  </p>
+                </div>
+                {student.national_id && (
+                  <div>
+                    <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                      <User className="h-3 w-3 sm:h-4 sm:w-4" />
+                      National ID
+                    </p>
+                    <p className="font-semibold text-sm sm:text-base">{student.national_id}</p>
+                  </div>
+                )}
               </div>
 
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                  <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-                  Admission Date
-                </p>
-                <p className="font-semibold text-sm sm:text-base">
-                  {new Date(student.admission_date).toLocaleDateString('en-GB')}
-                </p>
-              </div>
-              {student.instructor_name && (
+              {/* Right Column - 8 fields */}
+              <div className="flex-1 space-y-3">
+                {student.registration_number && (
+                  <div>
+                    <p className="text-xs sm:text-sm text-red-600 font-semibold">Reg NO:</p>
+                    <p className="font-semibold text-base sm:text-lg text-primary">{student.registration_number}</p>
+                  </div>
+                )}
+                {student.instructor_name && (
+                  <div>
+                    <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                      <GraduationCap className="h-3 w-3 sm:h-4 sm:w-4" />
+                      Instructor Name
+                    </p>
+                    <p className="font-semibold text-sm sm:text-base">{student.instructor_name}</p>
+                  </div>
+                )}
+                {student.latest_tai_certification && (
+                  <div>
+                    <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                      <Award className="h-3 w-3 sm:h-4 sm:w-4" />
+                      Latest TAI Certification
+                    </p>
+                    <p className="font-semibold text-sm sm:text-base break-all">{student.latest_tai_certification}</p>
+                  </div>
+                )}
+                {student.state && (
+                  <div>
+                    <p className="text-xs sm:text-sm text-muted-foreground">State</p>
+                    <p className="font-semibold text-sm sm:text-base">{student.state}</p>
+                  </div>
+                )}
+                {student.district && (
+                  <div>
+                    <p className="text-xs sm:text-sm text-muted-foreground">District</p>
+                    <p className="font-semibold text-sm sm:text-base">{student.district}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                    <GraduationCap className="h-3 w-3 sm:h-4 sm:w-4" />
-                    Instructor Name
+                    <MapPin className="h-3 w-3 sm:h-4 sm:w-4" />
+                    Address
                   </p>
-                  <p className="font-semibold text-sm sm:text-base">{student.instructor_name}</p>
+                  <p className="font-semibold text-sm sm:text-base break-words">{student.address || "Not provided"}</p>
                 </div>
-              )}
-              {student.latest_tai_certification && (
+                {student.admission_fee && (
+                  <div>
+                    <p className="text-xs sm:text-sm text-muted-foreground">Admission Fee</p>
+                    <p className="font-semibold text-sm sm:text-base">₹{student.admission_fee}</p>
+                  </div>
+                )}
                 <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                    <Award className="h-3 w-3 sm:h-4 sm:w-4" />
-                    Latest TAI Certification
+                  <p className="text-xs sm:text-sm text-muted-foreground">Fee Structure</p>
+                  <p className="font-semibold text-sm sm:text-base">
+                    {student.fee_structure === '2_classes_700'
+                      ? '2 classes/week - ₹700'
+                      : '4 classes/week - ₹1000'}
                   </p>
-                  <p className="font-semibold text-sm sm:text-base break-all">{student.latest_tai_certification}</p>
                 </div>
-              )}
-              {student.national_id && (
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                    <User className="h-3 w-3 sm:h-4 sm:w-4" />
-                    National ID
-                  </p>
-                  <p className="font-semibold text-sm sm:text-base">{student.national_id}</p>
-                </div>
-              )}
-
-              {student.state && (
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">State</p>
-                  <p className="font-semibold text-sm sm:text-base">{student.state}</p>
-                </div>
-              )}
-              {student.district && (
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">District</p>
-                  <p className="font-semibold text-sm sm:text-base">{student.district}</p>
-                </div>
-              )}
-              <div className="sm:col-span-2">
-                <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                  <MapPin className="h-3 w-3 sm:h-4 sm:w-4" />
-                  Address
-                </p>
-                <p className="font-semibold text-sm sm:text-base break-words">{student.address || "Not provided"}</p>
-              </div>
-              {student.admission_fee && (
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Admission Fee</p>
-                  <p className="font-semibold text-sm sm:text-base">₹{student.admission_fee}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Fee Structure</p>
-                <p className="font-semibold text-sm sm:text-base">
-                  {student.fee_structure === '2_classes_700'
-                    ? '2 classes/week - ₹700'
-                    : '4 classes/week - ₹1000'}
-                </p>
               </div>
             </div>
           </div>
@@ -861,7 +943,7 @@ const StudentProfile = () => {
                   <TableHead>Date</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Participation</TableHead>
-                  <TableHead>Prize</TableHead>
+                  <TableHead>Items</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -877,7 +959,7 @@ const StudentProfile = () => {
                     <TableRow key={event.id}>
                       <TableCell className="font-medium">{event.event_name}</TableCell>
                       <TableCell>{new Date(event.date).toLocaleDateString('en-GB')}</TableCell>
-                      <TableCell>{event.location}</TableCell>
+                      <TableCell>{event.location || '-'}</TableCell>
                       <TableCell>
                         {event.participation_type === 'winner' ? (
                           <Badge variant="default" className="bg-red-600">Winner</Badge>
@@ -885,7 +967,37 @@ const StudentProfile = () => {
                           <Badge variant="secondary">Participated</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{event.result || '-'}</TableCell>
+                      <TableCell>
+                        {event.event_items && event.event_items.length > 0 ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 gap-2">
+                                <Award className="h-4 w-4" />
+                                View Items ({event.event_items.length})
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80">
+                              <div className="space-y-3">
+                                <h4 className="font-semibold text-sm">Event Items</h4>
+                                <div className="space-y-2">
+                                  {event.event_items.map((item: any, idx: number) => (
+                                    <div key={idx} className="p-2 border rounded-md bg-muted/50">
+                                      <p className="font-medium text-sm">{item.item_name}</p>
+                                      {item.prize && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          🏆 {item.prize}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button

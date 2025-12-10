@@ -54,9 +54,9 @@ const Students = () => {
   }, [currentPage]);
 
   useEffect(() => {
-    // Search update (background)
+    // Search update (background) - also reload when search is cleared
     const timer = setTimeout(() => {
-      if (searchQuery !== "") fetchStudents(false);
+      fetchStudents(false);
     }, 500); // Debounce
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -322,7 +322,7 @@ const Students = () => {
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, belt, or instructor..."
+              placeholder="Search by name, belt, instructor, or registration number..."
               value={searchQuery}
               onChange={handleSearchChange}
               className="pl-10 pr-10"
@@ -392,6 +392,11 @@ const Students = () => {
                       <span>•</span>
                       <span>{student.age} years</span>
                     </div>
+                    {student.registration_number && (
+                      <div className="text-xs font-mono font-semibold">
+                        <span className="text-red-600">Reg NO:</span> <span className="text-primary">{student.registration_number}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 text-sm mt-2">

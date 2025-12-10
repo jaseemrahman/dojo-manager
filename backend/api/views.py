@@ -28,7 +28,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name', 'phone_number', 'instructor_name']
+    search_fields = ['name', 'phone_number', 'instructor_name', 'registration_number']
 
     def perform_destroy(self, instance):
         instance.is_active = False

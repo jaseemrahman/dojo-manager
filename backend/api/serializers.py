@@ -87,7 +87,7 @@ class MonthlyFeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = MonthlyFee
         fields = ['id', 'student', 'student_name', 'month', 'year', 'amount', 
-                  'status', 'paid_date', 'partial_amount_paid', 'payment_history', 
+                  'status', 'payment_method', 'paid_date', 'partial_amount_paid', 'payment_history', 
                   'notes', 'created_at', 'updated_at']
 
 class AttendanceSerializer(serializers.ModelSerializer):

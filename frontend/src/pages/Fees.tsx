@@ -27,6 +27,10 @@ const Fees = () => {
   const [partialPaymentOpen, setPartialPaymentOpen] = useState(false);
   const [selectedFeeForPartial, setSelectedFeeForPartial] = useState<any>(null);
   const [partialAmountInput, setPartialAmountInput] = useState("");
+  const [partialPaymentMethod, setPartialPaymentMethod] = useState("");
+  const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const [selectedFeeForPayment, setSelectedFeeForPayment] = useState<any>(null);
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [selectedStudentForInvoice, setSelectedStudentForInvoice] = useState<any>(null);
   const [invoiceDefaultMonth, setInvoiceDefaultMonth] = useState<number | undefined>(undefined);
@@ -148,54 +152,38 @@ const Fees = () => {
   };
 
   const handlePartialPayment = async () => {
-    const amount = parseFloat(partialAmountInput);
+    if (!selectedFeeForPartial || !partialAmountInput) return;
 
-    if (!selectedFeeForPartial || isNaN(amount) || amount <= 0) {
+    if (!partialPaymentMethod) {
       toast({
-        title: "Invalid amount",
-        description: "Please enter a valid amount",
+        title: "Payment method required",
+        description: "Please select a payment method",
         variant: "destructive",
       });
       return;
     }
 
-    // Get student and calculate total fee
+    const amount = parseFloat(partialAmountInput);
     const student = students.find(s => s.id === selectedFeeForPartial.student);
     const totalFee = student?.fee_structure === '4_classes_1000' ? 1000 : 700;
 
-    // Get current partial amount paid
-    const currentPartialPaid = parseFloat(selectedFeeForPartial.partial_amount_paid || "0");
-    const newTotal = currentPartialPaid + amount;
-
-    // Validate not exceeding total
-    if (newTotal > totalFee) {
+    if (isNaN(amount) || amount <= 0 || amount > totalFee) {
       toast({
-        title: "Amount Exceeds Total",
-        description: `Total fee is ₹${totalFee}. Already paid ₹${currentPartialPaid}. Cannot add ₹${amount}.`,
+        title: "Invalid amount",
+        description: `Please enter a valid amount between ₹1 and ₹${totalFee}`,
         variant: "destructive",
       });
       return;
     }
 
-    // Check if this payment completes the fee
-    if (newTotal === totalFee) {
-      // Auto-convert to paid
-      await updateFeeStatus(selectedFeeForPartial.id, "paid");
-      toast({
-        title: "Payment Complete",
-        description: `Fee fully paid (₹${totalFee})`,
-      });
-    } else {
-      // Update partial amount
-      await updateFeeStatus(selectedFeeForPartial.id, "partial", newTotal);
-    }
-
+    await updateFeeStatus(selectedFeeForPartial.id, 'partial', amount, partialPaymentMethod);
     setPartialPaymentOpen(false);
     setPartialAmountInput("");
+    setPartialPaymentMethod("");
     setSelectedFeeForPartial(null);
   };
 
-  const updateFeeStatus = async (feeId: number, status: string, partialAmount?: number) => {
+  const updateFeeStatus = async (feeId: number, status: string, partialAmount?: number, paymentMethod?: string) => {
     if (!isAdmin) return;
 
     try {
@@ -242,6 +230,11 @@ const Fees = () => {
       if (status === "paid") {
         updateData.paid_date = new Date().toISOString().split("T")[0];
 
+        // Include payment method if provided
+        if (paymentMethod) {
+          updateData.payment_method = paymentMethod;
+        }
+
         // If changing from partial to paid, add remaining amount to payment history
         if (fee.status === "partial" && fee.partial_amount_paid) {
           const student = students.find(s => s.id === fee.student);
@@ -263,9 +256,15 @@ const Fees = () => {
         updateData.paid_date = null;
         updateData.partial_amount_paid = 0;
         updateData.payment_history = [];
+        updateData.payment_method = null;
       } else if (status === "partial" && partialAmount) {
         updateData.partial_amount_paid = partialAmount;
         updateData.paid_date = new Date().toISOString().split("T")[0];
+
+        // Include payment method if provided
+        if (paymentMethod) {
+          updateData.payment_method = paymentMethod;
+        }
 
         // Add to payment history
         const currentHistory = fee.payment_history || [];
@@ -300,7 +299,13 @@ const Fees = () => {
     if (value === 'partial') {
       setSelectedFeeForPartial(fee);
       setPartialAmountInput(fee.partial_amount_paid ? fee.partial_amount_paid.toString() : "");
+      setPartialPaymentMethod("");
       setPartialPaymentOpen(true);
+    } else if (value === 'paid') {
+      // Show payment method dialog for paid status
+      setSelectedFeeForPayment(fee);
+      setPaymentMethod("");
+      setPaymentMethodOpen(true);
     } else {
       const student = students.find(s => s.id === fee.student);
       const feeAmount = student?.fee_structure === '4_classes_1000' ? 1000 : 700;
@@ -568,6 +573,7 @@ const Fees = () => {
                       <p className="text-xs sm:text-sm text-muted-foreground">
                         Total Amount: ₹{feeAmount.toFixed(2)}
                         {fee.paid_date && ` • Paid on ${new Date(fee.paid_date).toLocaleDateString()}`}
+                        {fee.payment_method && ` • ${fee.payment_method === 'upi' ? 'UPI' : 'Cash'}`}
                       </p>
                     </div>
                     {isAdmin && (
@@ -632,8 +638,8 @@ const Fees = () => {
                         {/* Status Dropdown - THIRD */}
                         <Select value={fee.status} onValueChange={(value) => handleStatusChange(fee.id, value)}>
                           <SelectTrigger className={`w-32 h-10 ${fee.status === 'paid' ? 'bg-green-50 text-green-700 border-green-300' :
-                              fee.status === 'partial' ? 'bg-yellow-50 text-orange-700 border-yellow-300' :
-                                'bg-red-50 text-red-700 border-red-300'
+                            fee.status === 'partial' ? 'bg-yellow-50 text-orange-700 border-yellow-300' :
+                              'bg-red-50 text-red-700 border-red-300'
                             }`}>
                             <SelectValue />
                           </SelectTrigger>
@@ -695,11 +701,11 @@ const Fees = () => {
       </Card>
 
       <Dialog open={partialPaymentOpen} onOpenChange={setPartialPaymentOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Partial Payment</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-2">
             {selectedFeeForPartial && (() => {
               const student = students.find(s => s.id === selectedFeeForPartial.student);
               const totalFee = student?.fee_structure === '4_classes_1000' ? 1000 : 700;
@@ -722,7 +728,7 @@ const Fees = () => {
                       <span className="font-bold text-red-600">₹{remaining}</span>
                     </div>
                   </div>
-                  <div>
+                  <div className="space-y-2">
                     <Label>Add Payment Amount</Label>
                     <Input
                       type="number"
@@ -731,6 +737,18 @@ const Fees = () => {
                       onChange={(e) => setPartialAmountInput(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label>Payment Method *</Label>
+                    <Select value={partialPaymentMethod} onValueChange={setPartialPaymentMethod}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="upi">UPI</SelectItem>
+                        <SelectItem value="cash">Cash</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </>
               );
             })()}
@@ -738,6 +756,66 @@ const Fees = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPartialPaymentOpen(false)}>Cancel</Button>
             <Button onClick={handlePartialPayment}>Add Payment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentMethodOpen} onOpenChange={setPaymentMethodOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Payment Method</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {selectedFeeForPayment && (() => {
+              const student = students.find(s => s.id === selectedFeeForPayment.student);
+              const totalFee = student?.fee_structure === '4_classes_1000' ? 1000 : 700;
+
+              return (
+                <>
+                  <div className="space-y-2 p-3 bg-muted rounded-lg">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Student:</span>
+                      <span className="font-semibold">{student?.name}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total Fee:</span>
+                      <span className="font-semibold">₹{totalFee}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Payment Method *</Label>
+                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="upi">UPI</SelectItem>
+                        <SelectItem value="cash">Cash</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentMethodOpen(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!paymentMethod) {
+                toast({
+                  title: "Payment method required",
+                  description: "Please select a payment method",
+                  variant: "destructive",
+                });
+                return;
+              }
+              const student = students.find(s => s.id === selectedFeeForPayment.student);
+              const feeAmount = student?.fee_structure === '4_classes_1000' ? 1000 : 700;
+              await updateFeeStatus(selectedFeeForPayment.id, 'paid', feeAmount, paymentMethod);
+              setPaymentMethodOpen(false);
+              setPaymentMethod("");
+              setSelectedFeeForPayment(null);
+            }}>Mark as Paid</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

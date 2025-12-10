@@ -24,8 +24,10 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
     guardian_name: "",
     gender: "",
     age: "",
-    instructor_name: ""
+    instructor_name: "",
+    current_belt: ""
   });
+  const [currentBeltLevel, setCurrentBeltLevel] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -43,13 +45,15 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
       // Auto-fill student info when editing
       const student = students.find((s: any) => s.id === test.student);
       if (student) {
+        fetchStudentBeltLevel(student.id);
         setStudentInfo({
           dob: student.date_of_birth || "",
           state: student.state || "",
           guardian_name: student.guardian_name || "",
           gender: student.gender || "",
           age: student.age?.toString() || "",
-          instructor_name: student.instructor_name || ""
+          instructor_name: student.instructor_name || "",
+          current_belt: student.current_belt || "white"
         });
       }
     } else {
@@ -68,23 +72,51 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
         guardian_name: "",
         gender: "",
         age: "",
-        instructor_name: ""
+        instructor_name: "",
+        current_belt: ""
       });
+      setCurrentBeltLevel("");
     }
   }, [test, open, students]);
+
+  const fetchStudentBeltLevel = async (studentId: number) => {
+    try {
+      const response = await api.get(`/belt-tests/?student=${studentId}`);
+      const beltTests = response.data || [];
+      const passedTests = beltTests.filter((t: any) => t.result === 'passed');
+
+      if (passedTests.length > 0) {
+        // Get the latest passed test
+        const latestTest = passedTests.sort((a: any, b: any) =>
+          new Date(b.test_date).getTime() - new Date(a.test_date).getTime()
+        )[0];
+        setCurrentBeltLevel(latestTest.tested_for_belt);
+      } else {
+        // Use student's initial belt level
+        const student = students.find((s: any) => s.id === studentId);
+        setCurrentBeltLevel(student?.current_belt || "white");
+      }
+    } catch (error) {
+      console.error("Failed to fetch belt tests:", error);
+      const student = students.find((s: any) => s.id === studentId);
+      setCurrentBeltLevel(student?.current_belt || "white");
+    }
+  };
 
   const handleStudentChange = (studentId: string) => {
     setFormData({ ...formData, student_id: studentId });
     // Note: studentId here is string from Select value, but might need parsing if comparing with number ID
     const student = students.find((s: any) => s.id.toString() === studentId);
     if (student) {
+      fetchStudentBeltLevel(student.id);
       setStudentInfo({
         dob: student.date_of_birth || "",
         state: student.state || "",
         guardian_name: student.guardian_name || "",
         gender: student.gender || "",
         age: student.age?.toString() || "",
-        instructor_name: student.instructor_name || ""
+        instructor_name: student.instructor_name || "",
+        current_belt: student.current_belt || "white"
       });
     }
   };
@@ -143,11 +175,16 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
               <p className="text-sm font-semibold text-muted-foreground">Student Information</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
+                  <Label className="text-xs">Current Belt Level</Label>
+                  <div className="text-sm font-semibold px-3 py-2 bg-background border rounded-md">
+                    {currentBeltLevel ? currentBeltLevel.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) : 'Loading...'}
+                  </div>
+                </div>
+                <div className="space-y-1">
                   <Label className="text-xs">Date of Birth</Label>
                   <Input
                     type="date"
                     value={studentInfo.dob}
-                    onChange={(e) => setStudentInfo({ ...studentInfo, dob: e.target.value })}
                     className="text-sm"
                     readOnly
                   />
@@ -157,7 +194,6 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
                   <Input
                     type="number"
                     value={studentInfo.age}
-                    onChange={(e) => setStudentInfo({ ...studentInfo, age: e.target.value })}
                     className="text-sm"
                     readOnly
                   />
@@ -174,7 +210,6 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
                   <Label className="text-xs">State</Label>
                   <Input
                     value={studentInfo.state}
-                    onChange={(e) => setStudentInfo({ ...studentInfo, state: e.target.value })}
                     className="text-sm"
                     readOnly
                   />
@@ -183,7 +218,6 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
                   <Label className="text-xs">Guardian Name</Label>
                   <Input
                     value={studentInfo.guardian_name}
-                    onChange={(e) => setStudentInfo({ ...studentInfo, guardian_name: e.target.value })}
                     className="text-sm"
                     readOnly
                   />
@@ -192,7 +226,6 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
                   <Label className="text-xs">Instructor Name</Label>
                   <Input
                     value={studentInfo.instructor_name}
-                    onChange={(e) => setStudentInfo({ ...studentInfo, instructor_name: e.target.value })}
                     className="text-sm"
                     readOnly
                   />
@@ -211,19 +244,38 @@ const BeltTestDialog = ({ open, test, students, onClose }: any) => {
             <Select value={formData.tested_for_belt} onValueChange={(v) => setFormData({ ...formData, tested_for_belt: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="white">White</SelectItem>
-                <SelectItem value="yellow_stripe">Yellow Stripe</SelectItem>
-                <SelectItem value="yellow">Yellow</SelectItem>
-                <SelectItem value="green_stripe">Green Stripe</SelectItem>
-                <SelectItem value="green">Green</SelectItem>
-                <SelectItem value="blue_stripe">Blue Stripe</SelectItem>
-                <SelectItem value="blue">Blue</SelectItem>
-                <SelectItem value="red_stripe">Red Stripe</SelectItem>
-                <SelectItem value="red">Red</SelectItem>
-                <SelectItem value="red_black">Red Black</SelectItem>
-                <SelectItem value="black_1st_dan">Black 1st Dan</SelectItem>
-                <SelectItem value="black_2nd_dan">Black 2nd Dan</SelectItem>
-                <SelectItem value="black_3rd_dan">Black 3rd Dan</SelectItem>
+                {(() => {
+                  const beltLevels = [
+                    { value: 'white', label: 'White', order: 0 },
+                    { value: 'yellow_stripe', label: 'Yellow Stripe', order: 1 },
+                    { value: 'yellow', label: 'Yellow', order: 2 },
+                    { value: 'green_stripe', label: 'Green Stripe', order: 3 },
+                    { value: 'green', label: 'Green', order: 4 },
+                    { value: 'blue_stripe', label: 'Blue Stripe', order: 5 },
+                    { value: 'blue', label: 'Blue', order: 6 },
+                    { value: 'red_stripe', label: 'Red Stripe', order: 7 },
+                    { value: 'red', label: 'Red', order: 8 },
+                    { value: 'red_black', label: 'Red Black', order: 9 },
+                    { value: 'black_1st_dan', label: 'Black 1st Dan', order: 10 },
+                    { value: 'black_2nd_dan', label: 'Black 2nd Dan', order: 11 },
+                    { value: 'black_3rd_dan', label: 'Black 3rd Dan', order: 12 }
+                  ];
+
+                  if (!formData.student_id || !currentBeltLevel) {
+                    return beltLevels.map(b => (
+                      <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                    ));
+                  }
+
+                  const currentBeltOrder = beltLevels.find(b => b.value === currentBeltLevel)?.order || 0;
+
+                  // Only show belts higher than current
+                  return beltLevels
+                    .filter(b => b.order > currentBeltOrder)
+                    .map(b => (
+                      <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                    ));
+                })()}
               </SelectContent>
             </Select>
           </div>

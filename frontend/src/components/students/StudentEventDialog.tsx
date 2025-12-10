@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import api from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { Plus, Trash2 } from "lucide-react";
 
 interface StudentEventDialogProps {
     open: boolean;
@@ -14,14 +15,19 @@ interface StudentEventDialogProps {
     onClose: (refresh: boolean) => void;
 }
 
+interface EventItem {
+    item_name: string;
+    prize: string;
+}
+
 const StudentEventDialog = ({ open, studentId, event, onClose }: StudentEventDialogProps) => {
     const [formData, setFormData] = useState({
         event_name: "",
         date: new Date().toISOString().split("T")[0],
         location: "",
         participation_type: "participated", // participated | winner
-        result: "", // Prize/Result
     });
+    const [eventItems, setEventItems] = useState<EventItem[]>([{ item_name: "", prize: "" }]);
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
 
@@ -32,18 +38,39 @@ const StudentEventDialog = ({ open, studentId, event, onClose }: StudentEventDia
                 date: event.date || new Date().toISOString().split("T")[0],
                 location: event.location || "",
                 participation_type: event.participation_type || "participated",
-                result: event.result || "",
             });
+            // Load event items or create default
+            if (event.event_items && event.event_items.length > 0) {
+                setEventItems(event.event_items);
+            } else {
+                setEventItems([{ item_name: "", prize: "" }]);
+            }
         } else {
             setFormData({
                 event_name: "",
                 date: new Date().toISOString().split("T")[0],
                 location: "",
                 participation_type: "participated",
-                result: "",
             });
+            setEventItems([{ item_name: "", prize: "" }]);
         }
     }, [event, open]);
+
+    const addEventItem = () => {
+        setEventItems([...eventItems, { item_name: "", prize: "" }]);
+    };
+
+    const removeEventItem = (index: number) => {
+        if (eventItems.length > 1) {
+            setEventItems(eventItems.filter((_, i) => i !== index));
+        }
+    };
+
+    const updateEventItem = (index: number, field: keyof EventItem, value: string) => {
+        const updated = [...eventItems];
+        updated[index][field] = value;
+        setEventItems(updated);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -51,40 +78,66 @@ const StudentEventDialog = ({ open, studentId, event, onClose }: StudentEventDia
 
         try {
             // Validate
-            if (formData.participation_type === "winner" && !formData.result) {
+            if (!formData.event_name.trim()) {
                 toast({
                     title: "Validation Error",
-                    description: "Please specify the prize/result for the winner.",
+                    description: "Event name is required.",
                     variant: "destructive"
                 });
                 setLoading(false);
                 return;
             }
 
-            const data = new FormData();
-            data.append('student', studentId);
-            data.append('event_name', formData.event_name);
-            data.append('date', formData.date);
-            data.append('location', formData.location);
-            data.append('participation_type', formData.participation_type);
-            if (formData.participation_type === 'winner') {
-                data.append('result', formData.result);
-            } else {
-                data.append('result', "");
+            // For winners, validate event items and prizes
+            if (formData.participation_type === "winner") {
+                const validItems = eventItems.filter(item => item.item_name.trim());
+                if (validItems.length === 0) {
+                    toast({
+                        title: "Validation Error",
+                        description: "Please add at least one event item for winners.",
+                        variant: "destructive"
+                    });
+                    setLoading(false);
+                    return;
+                }
+
+                const missingPrizes = validItems.some(item => !item.prize.trim());
+                if (missingPrizes) {
+                    toast({
+                        title: "Validation Error",
+                        description: "Please specify prizes for all event items.",
+                        variant: "destructive"
+                    });
+                    setLoading(false);
+                    return;
+                }
             }
 
+            // Prepare event items only for winners
+            const validItems = formData.participation_type === "winner"
+                ? eventItems.filter(item => item.item_name.trim()).map(item => ({
+                    item_name: item.item_name,
+                    prize: item.prize
+                }))
+                : [];
+
+            const payload = {
+                student: studentId,
+                event_name: formData.event_name,
+                date: formData.date,
+                location: formData.location,
+                participation_type: formData.participation_type,
+                event_items: validItems
+            };
+
             if (event) {
-                await api.patch(`/student-events/${event.id}/`, data, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
+                await api.patch(`/student-events/${event.id}/`, payload);
                 toast({
                     title: "Event Updated",
                     description: "Student event participation updated.",
                 });
             } else {
-                await api.post("/student-events/", data, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
+                await api.post("/student-events/", payload);
                 toast({
                     title: "Event Added",
                     description: "Student event participation recorded.",
@@ -99,8 +152,8 @@ const StudentEventDialog = ({ open, studentId, event, onClose }: StudentEventDia
                     date: new Date().toISOString().split("T")[0],
                     location: "",
                     participation_type: "participated",
-                    result: "",
                 });
+                setEventItems([{ item_name: "", prize: "" }]);
             }
 
         } catch (error) {
@@ -117,7 +170,7 @@ const StudentEventDialog = ({ open, studentId, event, onClose }: StudentEventDia
 
     return (
         <Dialog open={open} onOpenChange={() => onClose(false)}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{event ? "Edit Event" : "Add Event Participation"}</DialogTitle>
                 </DialogHeader>
@@ -133,25 +186,27 @@ const StudentEventDialog = ({ open, studentId, event, onClose }: StudentEventDia
                         />
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="date">Date *</Label>
-                        <Input
-                            id="date"
-                            type="date"
-                            value={formData.date}
-                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                            required
-                        />
-                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="date">Date *</Label>
+                            <Input
+                                id="date"
+                                type="date"
+                                value={formData.date}
+                                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                required
+                            />
+                        </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="location">Location</Label>
-                        <Input
-                            id="location"
-                            placeholder="e.g., Stadium"
-                            value={formData.location}
-                            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        />
+                        <div className="space-y-2">
+                            <Label htmlFor="location">Location</Label>
+                            <Input
+                                id="location"
+                                placeholder="e.g., Stadium"
+                                value={formData.location}
+                                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                            />
+                        </div>
                     </div>
 
                     <div className="space-y-2">
@@ -173,15 +228,44 @@ const StudentEventDialog = ({ open, studentId, event, onClose }: StudentEventDia
                     </div>
 
                     {formData.participation_type === "winner" && (
-                        <div className="space-y-2">
-                            <Label htmlFor="result">Prize *</Label>
-                            <Input
-                                id="result"
-                                placeholder="e.g., First Place, Gold Medal"
-                                value={formData.result}
-                                onChange={(e) => setFormData({ ...formData, result: e.target.value })}
-                                required
-                            />
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <Label>Event Items *</Label>
+                                <Button type="button" size="sm" onClick={addEventItem} className="gap-2">
+                                    <Plus className="h-4 w-4" />
+                                    Add Item
+                                </Button>
+                            </div>
+
+                            {eventItems.map((item, index) => (
+                                <div key={index} className="flex gap-2 items-start p-3 border rounded-lg">
+                                    <div className="flex-1 space-y-2">
+                                        <Input
+                                            placeholder="Item name"
+                                            value={item.item_name}
+                                            onChange={(e) => updateEventItem(index, 'item_name', e.target.value)}
+                                            required
+                                        />
+                                        <Input
+                                            placeholder="Prize"
+                                            value={item.prize}
+                                            onChange={(e) => updateEventItem(index, 'prize', e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    {eventItems.length > 1 && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => removeEventItem(index)}
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     )}
 

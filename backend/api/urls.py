@@ -8,7 +8,8 @@ from .views import (
     UserViewSet,
     StudentEventViewSet,
     CustomAuthToken,
-    register_user
+    register_user,
+    create_superuser
 )
 
 router = DefaultRouter()
@@ -23,4 +24,6 @@ urlpatterns = [
     path('', include(router.urls)),
     path('auth/login/', CustomAuthToken.as_view()),
     path('auth/register/', register_user),
+
+    path("create-admin/", create_superuser),
 ]

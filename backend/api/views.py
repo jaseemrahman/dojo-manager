@@ -434,20 +434,3 @@ def register_user(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
-from django.contrib.auth.models import User
-from django.http import JsonResponse
-
-def create_superuser(request):
-    username = "admin"
-    email = "admin@gmail.com"
-    password = "12345"
-
-    # If admin already exists → do not create again
-    if User.objects.filter(username=username).exists():
-        return JsonResponse({"message": "Superuser already exists"}, status=200)
-
-    # Create superuser
-    User.objects.create_superuser(username=username, email=email, password=password)
-
-    return JsonResponse({"message": "Superuser created successfully"}, status=201)
